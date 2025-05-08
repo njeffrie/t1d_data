@@ -1,51 +1,89 @@
-import xml.etree.ElementTree as ET
-import utils
-from datetime import datetime
+"""Parser for Apple Health export XML data."""
 
-tree = ET.parse('apple_health_export/export.xml')
-root = tree.getroot()
+import datetime
+from typing import Dict
+
+import tqdm
+import xml.etree.ElementTree as ET
+
+import utils
+
 
 class AppleHealthParser:
+    """Parser for Apple Health export XML data.
+
+    This class handles parsing of heart rate variability (HRV) and resting heart rate (RHR)
+    data from Apple Health export XML files.
+    """
+
     HRV_TYPE = 'HKQuantityTypeIdentifierHeartRateVariabilitySDNN'
     RHR_TYPE = 'HKQuantityTypeIdentifierRestingHeartRate'
-    def __init__(self, fname):
+
+    def __init__(self, fname: str) -> None:
+        """Initialize the parser with the XML file.
+
+        Args:
+            fname: Path to the Apple Health export XML file.
+        """
         self.element_tree = ET.parse(fname)
         self.root = self.element_tree.getroot()
+        self._parse_data()
 
-    def get_hrv(self) -> dict:
-        hrv_entries = {}
-        for elem in self.root:
-            if elem.tag == 'Record' and elem.attrib['type'] == self.HRV_TYPE:
-                start_dt = utils.round(datetime.fromisoformat(elem.attrib['startDate']))
-                hrv_entries[start_dt] = float(elem.attrib['value'])
-        return hrv_entries
+    def _parse_data(self) -> None:
+        """Parse all health data in a single pass through the XML.
 
-    def get_rhr(self) -> dict:
-        rhr_entries = {}
-        for elem in self.root:
-            if elem.tag == 'Record' and elem.attrib['type'] == self.RHR_TYPE:
-                start_dt = utils.round(datetime.fromisoformat(elem.attrib['startDate']))
-                rhr_entries[start_dt] = float(elem.attrib['value'])
-        return rhr_entries
+        This method populates self.hrv_entries and self.rhr_entries with data from the XML.
+        """
+        self.hrv_entries: Dict[str, float] = {}
+        self.rhr_entries: Dict[str, float] = {}
 
-    def get_all_data(self) -> dict:
-        hrv_data = self.get_hrv()
-        rhr_data = self.get_rhr()
+        for elem in tqdm.tqdm(self.root):
+            if elem.tag != 'Record':
+                continue
 
-        # First convert both to lists, append, then deduplicate.
-        all_keys = list(set(list(hrv_data.keys()) + list(rhr_data.keys())))
+            record_type = elem.attrib.get('type')
+            if record_type not in [self.HRV_TYPE, self.RHR_TYPE]:
+                continue
+
+            start_dt = utils.round(datetime.datetime.fromisoformat(elem.attrib['startDate']))
+            value = float(elem.attrib['value'])
+
+            if record_type == self.HRV_TYPE:
+                self.hrv_entries[start_dt] = value
+            elif record_type == self.RHR_TYPE:
+                self.rhr_entries[start_dt] = value
+
+    def get_all_data(self) -> Dict[str, Dict[str, float]]:
+        """Get all health data combined.
+
+        Returns:
+            A dictionary mapping timestamps to dictionaries containing HRV and RHR values.
+            Example:
+            {
+                '2024-01-01T00:00:00': {
+                    'rhr': 60.0,
+                    'hrv': 50.0
+                }
+            }
+        """
+        all_keys = list(set(list(self.hrv_entries.keys()) + list(self.rhr_entries.keys())))
 
         all_data = {}
         for key in all_keys:
-            elem = {}
-            elem['rhr'] = rhr_data[key] if key in rhr_data.keys() else None
-            elem['hrv'] = hrv_data[key] if key in hrv_data.keys() else None
+            elem = {
+                'rhr': self.rhr_entries.get(key),
+                'hrv': self.hrv_entries.get(key)
+            }
             all_data[key] = elem
         return all_data
 
 
-
-if __name__ == '__main__':
+def main() -> None:
+    """Main function to demonstrate parser usage."""
     parser = AppleHealthParser('apple_health_export/export.xml')
     hrv_data = parser.get_all_data()
     print(len(hrv_data.keys()))
+
+
+if __name__ == '__main__':
+    main()
