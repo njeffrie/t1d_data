@@ -37,6 +37,7 @@ class AppleHealthParser:
 
         all_data = {}
         for key in all_keys:
+            elem = {}
             elem['rhr'] = rhr_data[key] if key in rhr_data.keys() else None
             elem['hrv'] = hrv_data[key] if key in hrv_data.keys() else None
             all_data[key] = elem
