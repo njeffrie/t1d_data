@@ -40,8 +40,7 @@ class Dataset:
         self.data = {}
         for key in all_keys:
             elem = pump_data[key] if key in pump_data.keys() else {}
-            elem['rhr'] = watch_data[key]['rhr'] if key in watch_data.keys() else None
-            elem['hrv'] = watch_data[key]['hrv'] if key in watch_data.keys() else None
+            elem['hr'] = watch_data[key]['hr'] if key in watch_data.keys() else None
             elem['timestamp'] = key
             elem['bg'] = elem.get('bg', None)
             elem['bolus'] = elem.get('bolus', 0.0)
@@ -69,7 +68,7 @@ class Dataset:
         df = pd.DataFrame.from_dict(self.data, orient='index')
 
         # Interpolate missing values
-        numeric_columns = ['bg', 'rhr', 'hrv', 'iob']
+        numeric_columns = ['bg', 'hr', 'iob']
         df[numeric_columns] = df[numeric_columns].interpolate(method='linear', limit=6)  # interpolate up to 30 min gaps
 
         # Convert back to dictionary format
@@ -89,8 +88,7 @@ class Dataset:
             records.append({
                 'timestamp': timestamp,
                 'bg': record['bg'],
-                'rhr': record['rhr'],
-                'hrv': record['hrv'],
+                'hr': record['hr'],
                 'iob': record['iob'],
                 'bolus': record['bolus'],
                 'carbs': record['carbs'],
