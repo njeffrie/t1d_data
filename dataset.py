@@ -4,21 +4,24 @@ import numpy as np
 import pandas as pd
 from datasets import Dataset as HFDataset
 
-from parse_csv import PumpParser
-from parse_xml import AppleHealthParser
+from parsers import PumpParser, AppleHealthParser, FoodParser
 
 class Dataset:
-    def __init__(self, pump_ds_dir, apple_ds_file):
+    def __init__(self, pump_ds_dir, apple_ds_file, food_ds_file=None):
         self.pump_parser = PumpParser(pump_ds_dir)
         self.apple_parser = AppleHealthParser(apple_ds_file)
+        self.food_parser = FoodParser(food_ds_file) if food_ds_file else None
         self._colate()
 
     def _colate(self):
         pump_data = self.pump_parser.get_all_data()
         watch_data = self.apple_parser.get_all_data()
+        food_data = self.food_parser.get_all_data() if self.food_parser else {}
 
         # Append, deduplicate all keys and sort them
-        all_keys = sorted(list(set(list(pump_data.keys()) + list(watch_data.keys()))))
+        all_keys = sorted(list(set(list(pump_data.keys()) + 
+                                 list(watch_data.keys()) + 
+                                 list(food_data.keys()))))
         self.times = np.array(all_keys)
 
         self.time_to_idx = {}
@@ -40,7 +43,20 @@ class Dataset:
         self.data = {}
         for key in all_keys:
             elem = pump_data[key] if key in pump_data.keys() else {}
-            elem['hr'] = watch_data[key]['hr'] if key in watch_data.keys() else None
+            # Add heart rate and activity data from watch
+            if key in watch_data:
+                elem['hr'] = watch_data[key]['hr']
+                elem['running'] = watch_data[key]['running']
+                elem['walking'] = watch_data[key]['walking']
+                elem['nordic_skiing'] = watch_data[key]['nordic_skiing']
+            else:
+                elem['hr'] = None
+                elem['running'] = False
+                elem['walking'] = False
+                elem['nordic_skiing'] = False
+                
+            if self.food_parser and key in food_data:
+                elem.update(food_data[key])
             elem['timestamp'] = key
             elem['bg'] = elem.get('bg', None)
             elem['bolus'] = elem.get('bolus', 0.0)
@@ -52,15 +68,13 @@ class Dataset:
         # Calculate IoB for each timestamp
         sorted_times = sorted(all_keys)
         for i, curr_time in enumerate(sorted_times):
-            curr_dt = datetime.datetime.fromisoformat(curr_time).replace(tzinfo=None)
             total_iob = 0.0
 
             # Look back 5 hours (300 minutes) for insulin contributions
             for prev_time in sorted_times[max(0, i-60):i]:  # Assuming 5-min intervals, look back 60 entries
-                prev_dt = datetime.datetime.fromisoformat(prev_time).replace(tzinfo=None)
-                if (curr_dt - prev_dt).total_seconds() <= 300 * 60:  # Within 5 hours
+                if (curr_time - prev_time).total_seconds() <= 300 * 60:  # Within 5 hours
                     if 'bolus' in self.data[prev_time] and self.data[prev_time]['bolus'] > 0:
-                        total_iob += iob_contribution(curr_dt, prev_dt, self.data[prev_time]['bolus'])
+                        total_iob += iob_contribution(curr_time, prev_time, self.data[prev_time]['bolus'])
 
             self.data[curr_time]['iob'] = total_iob
 
@@ -86,14 +100,21 @@ class Dataset:
         for timestamp in sorted(self.data.keys()):
             record = self.data[timestamp]
             records.append({
-                'timestamp': timestamp,
+                'timestamp': timestamp.isoformat(),  # Convert datetime to string for serialization
                 'bg': record['bg'],
                 'hr': record['hr'],
                 'iob': record['iob'],
                 'bolus': record['bolus'],
                 'carbs': record['carbs'],
                 'food_bolus': record['food_bolus'],
-                'corr_bolus': record['corr_bolus']
+                'corr_bolus': record['corr_bolus'],
+                'calories': record.get('calories', 0.0),
+                'protein': record.get('protein', 0.0),
+                'fat': record.get('fat', 0.0),
+                'meal_type': record.get('meal_type', None),
+                'running': record.get('running', False),
+                'walking': record.get('walking', False),
+                'nordic_skiing': record.get('nordic_skiing', False)
             })
 
         # Create HuggingFace dataset
@@ -101,6 +122,7 @@ class Dataset:
 
         # Save to disk
         hf_dataset.save_to_disk(save_file)
+        hf_dataset.to_csv(save_file + '.csv')
 
 if __name__ == '__main__':
     import argparse
@@ -108,8 +130,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Process diabetes dataset.')
     parser.add_argument('--pump_ds_dir', type=str, default='pump', help='Directory containing pump data CSV files.')
     parser.add_argument('--apple_ds_file', type=str, default='apple_health_export/export.xml', help='Path to Apple Health export XML file.')
+    parser.add_argument('--food_ds_file', type=str, default=None, help='Path to nutrition summary CSV file.')
     parser.add_argument('--save_file', type=str, default='dataset', help='Path to save the dataset.')
     args = parser.parse_args()
 
-    dataset = Dataset(args.pump_ds_dir, args.apple_ds_file)
+    dataset = Dataset(args.pump_ds_dir, args.apple_ds_file, args.food_ds_file)
     dataset.save_to_disk(args.save_file)
