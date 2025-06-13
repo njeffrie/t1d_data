@@ -79,23 +79,22 @@ class FoodParser:
             # Combine date and time
             dt_str = f"{date_str} {time_str}"
             dt = datetime.datetime.strptime(dt_str, '%Y-%m-%d %I:%M %p')
-            dt = utils.round(dt)
+            key = utils.round(dt)
             
             # Create entry for this timestamp
-            if dt.isoformat() not in self.food_entries:
-                self.food_entries[dt.isoformat()] = {
+            if key not in self.food_entries:
+                self.food_entries[key] = {
                     'calories': 0.0,
                     'carbs': 0.0,
                     'protein': 0.0,
                     'fat': 0.0,
                     'fiber': 0.0,
                     'saturated_fat': 0.0,
-                    'sodium': 0.0,
-                    'meal_type': None
+                    'sodium': 0.0
                 }
             
             # Add nutrition data
-            entry = self.food_entries[dt.isoformat()]
+            entry = self.food_entries[key]
             entry['calories'] += float(row['Calories']) if not pd.isna(row['Calories']) else 0.0
             entry['carbs'] += float(row['Carbohydrates (g)']) if not pd.isna(row['Carbohydrates (g)']) else 0.0
             entry['protein'] += float(row['Protein (g)']) if not pd.isna(row['Protein (g)']) else 0.0
@@ -103,7 +102,6 @@ class FoodParser:
             entry['fiber'] += float(row['Fiber']) if not pd.isna(row['Fiber']) else 0.0
             entry['saturated_fat'] += float(row['Saturated Fat']) if not pd.isna(row['Saturated Fat']) else 0.0
             entry['sodium'] += float(row['Sodium (mg)']) if not pd.isna(row['Sodium (mg)']) else 0.0
-            entry['meal_type'] = row['Meal']
 
     def get_all_data(self) -> Dict[str, Dict]:
         """Get all nutrition data.

@@ -1,7 +1,7 @@
 """Parser modules for diabetes data processing."""
 
 from .parse_xml import AppleHealthParser
-from .parse_csv import PumpParser
+from .parse_pump import PumpParser
 from .parse_food import FoodParser
 from .utils import round
 

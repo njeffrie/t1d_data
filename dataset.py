@@ -111,6 +111,8 @@ class Dataset:
                 'calories': record.get('calories', 0.0),
                 'protein': record.get('protein', 0.0),
                 'fat': record.get('fat', 0.0),
+                'saturated_fat': record.get('saturated_fat', 0.0),
+                'sodium': record.get('sodium', 0.0),
                 'meal_type': record.get('meal_type', None),
                 'running': record.get('running', False),
                 'walking': record.get('walking', False),
